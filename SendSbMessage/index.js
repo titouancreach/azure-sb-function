@@ -1,13 +1,43 @@
-module.exports = async function (context, req) {
-    context.log('JavaScript HTTP trigger function processed a request.');
+const { ServiceBusClient } = require("@azure/service-bus");
 
-    const name = (req.query.name || (req.body && req.body.name));
-    const responseMessage = name
-        ? "Hello, " + name + ". This HTTP triggered function executed successfully."
-        : "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response.";
+module.exports = async function (context, req) {
+    const connectionString = req.headers["x-sbconnectionstring"];
+    const subject = req.headers["x-subject"]
+    const topic = req.headers["x-topic"]
+
+    if (!connectionString || !subject || !topic) {
+        context.res = {
+            status: 400,
+            body: "Please pass a connection string (x-connectionstring), a subject (x-subject) and a topic (x-topic) in the request header"
+        };
+        return;
+    }
+
+    const { body } = req
+
+    const sbClient = new ServiceBusClient(connectionString);
+    const sender = sbClient.createSender(topic);
+
+    try {
+
+        await sender.sendMessages({
+            body,
+            contentType: "application/json",
+            subject
+        });
+
+    } catch (err) {
+        context.res = {
+            status: 500,
+            body: err.message
+        };
+        return;
+    } finally {
+        await sender.close();
+        await sbClient.close();
+    }
 
     context.res = {
-        // status: 200, /* Defaults to 200 */
-        body: responseMessage
+        body: "ok"
     };
 }
